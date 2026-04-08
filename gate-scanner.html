@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Event Gate Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f1a;
+      min-height: 100vh;
+      color: white;
+    }
+
+    .header {
+      background: #1a1a2e;
+      padding: 16px 20px;
+      text-align: center;
+      border-bottom: 1px solid #2a2a4a;
+    }
+    .header h1 { font-size: 20px; font-weight: 600; letter-spacing: 0.5px; }
+    .header p { font-size: 12px; color: #888; margin-top: 3px; }
+
+    .scanner-wrap {
+      margin: 20px;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 2px solid #2a2a4a;
+      position: relative;
+    }
+
+    #reader { width: 100%; }
+
+    #reader video { border-radius: 0 !important; }
+
+    .scan-status {
+      background: #1a1a2e;
+      text-align: center;
+      padding: 10px;
+      font-size: 13px;
+      color: #aaa;
+    }
+
+    .manual-section {
+      margin: 0 20px 20px;
+      background: #1a1a2e;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #2a2a4a;
+    }
+
+    .manual-section label {
+      font-size: 13px;
+      color: #aaa;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .manual-section input {
+      flex: 1;
+      padding: 12px 14px;
+      background: #0f0f1a;
+      border: 1.5px solid #2a2a4a;
+      border-radius: 8px;
+      color: white;
+      font-size: 15px;
+      outline: none;
+    }
+
+    .manual-section input:focus { border-color: #534AB7; }
+
+    .verify-btn {
+      padding: 12px 18px;
+      background: #534AB7;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .verify-btn:active { background: #3C3489; transform: scale(0.97); }
+
+    .result-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+    }
+
+    .result-overlay.show { display: flex; }
+
+    .result-card {
+      width: 100%;
+      max-width: 360px;
+      border-radius: 20px;
+      padding: 36px 24px;
+      text-align: center;
+      animation: popIn 0.3s ease;
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.8); opacity: 0; }
+      to   { transform: scale(1);   opacity: 1; }
+    }
+
+    .result-card.success {
+      background: #0d2b1e;
+      border: 2px solid #1D9E75;
+    }
+
+    .result-card.error {
+      background: #2b0d0d;
+      border: 2px solid #E24B4A;
+    }
+
+    .result-icon { font-size: 64px; margin-bottom: 16px; }
+
+    .result-status {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .success .result-status { color: #1D9E75; }
+    .error   .result-status { color: #E24B4A; }
+
+    .result-name {
+      font-size: 28px;
+      font-weight: 600;
+      color: white;
+      margin-bottom: 6px;
+    }
+
+    .result-id {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 20px;
+      font-family: monospace;
+    }
+
+    .next-btn {
+      width: 100%;
+      padding: 15px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+
+    .success .next-btn { background: #1D9E75; color: white; }
+    .error   .next-btn { background: #E24B4A; color: white; }
+
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .loading-overlay.show { display: flex; }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #333;
+      border-top-color: #534AB7;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-overlay p { color: #aaa; font-size: 15px; }
+
+    .corner-tl, .corner-tr, .corner-bl, .corner-br {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border-color: #534AB7;
+      border-style: solid;
+      z-index: 10;
+    }
+    .corner-tl { top: 30%; left: 22%; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .corner-tr { top: 30%; right: 22%; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .corner-bl { bottom: 30%; left: 22%; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .corner-br { bottom: 30%; right: 22%; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Event Gate Scanner</h1>
+    <p>QR scan karo ya Guest ID type karo</p>
+  </div>
+
+  <div class="scanner-wrap">
+    <div class="corner-tl"></div>
+    <div class="corner-tr"></div>
+    <div class="corner-bl"></div>
+    <div class="corner-br"></div>
+    <div id="reader"></div>
+    <div class="scan-status" id="scan-status">Camera start ho rahi hai...</div>
+  </div>
+
+  <div class="manual-section">
+    <label>Manual entry — Guest ID type karo:</label>
+    <div class="input-row">
+      <input type="text" id="manual-input" placeholder="EVT2026-..." autocomplete="off" />
+      <button class="verify-btn" onclick="verifyManual()">Verify</button>
+    </div>
+  </div>
+
+  <div class="result-overlay" id="result-overlay">
+    <div class="result-card" id="result-card">
+      <div class="result-icon" id="result-icon"></div>
+      <div class="result-status" id="result-status"></div>
+      <div class="result-name" id="result-name"></div>
+      <div class="result-id" id="result-id"></div>
+      <button class="next-btn" onclick="nextGuest()">Next Guest Scan Karo</button>
+    </div>
+  </div>
+
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="spinner"></div>
+    <p>Checking...</p>
+  </div>
+
+  <script>
+    // =============================================
+    // APNA APPS SCRIPT URL YAHAN DAALO
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz5g4FArRN3evtJeyvPOb49Wy4Ty_7KGqL86SzdzISYrd1P6koM5DC0JwFiAchUQ50Y/exec';
+    // =============================================
+
+    let scanner;
+    let busy = false;
+
+    function startCamera() {
+      scanner = new Html5Qrcode("reader");
+      Html5Qrcode.getCameras().then(cameras => {
+        if (!cameras || cameras.length === 0) {
+          document.getElementById('scan-status').textContent = 'Camera nahi mila — manual entry use karo';
+          return;
+        }
+
+        const backCamera = cameras.find(c =>
+          c.label.toLowerCase().includes('back') ||
+          c.label.toLowerCase().includes('rear') ||
+          c.label.toLowerCase().includes('environment')
+        ) || cameras[cameras.length - 1];
+
+        scanner.start(
+          backCamera.id,
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          function(decodedText) {
+            if (busy) return;
+            busy = true;
+            document.getElementById('scan-status').textContent = 'QR detected! Checking...';
+            verifyGuest(decodedText);
+          },
+          function() {}
+        ).then(() => {
+          document.getElementById('scan-status').textContent = 'QR Code scanner ke saamne rakho';
+        }).catch(err => {
+          document.getElementById('scan-status').textContent = 'Camera error — manual entry use karo';
+          console.log(err);
+        });
+      }).catch(() => {
+        document.getElementById('scan-status').textContent = 'Camera access nahi mila — manual use karo';
+      });
+    }
+
+    function verifyManual() {
+      const val = document.getElementById('manual-input').value.trim();
+      if (!val) { alert('Guest ID daalo pehle!'); return; }
+      if (busy) return;
+      busy = true;
+      verifyGuest(val);
+    }
+
+    function verifyGuest(guestId) {
+      document.getElementById('loading-overlay').classList.add('show');
+
+      const url = APPS_SCRIPT_URL + '?guestId=' + encodeURIComponent(guestId);
+
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          document.getElementById('loading-overlay').classList.remove('show');
+          showResult(data);
+        })
+        .catch(err => {
+          document.getElementById('loading-overlay').classList.remove('show');
+          busy = false;
+          alert('Network error! Internet check karo.');
+          console.log(err);
+        });
+    }
+
+    function showResult(res) {
+      if (scanner) scanner.pause();
+
+      const overlay = document.getElementById('result-overlay');
+      const card    = document.getElementById('result-card');
+
+      card.className = 'result-card ' + (res.success ? 'success' : 'error');
+
+      document.getElementById('result-icon').textContent   = res.success ? '✅' : '❌';
+      document.getElementById('result-status').textContent = res.message;
+      document.getElementById('result-name').textContent   = res.name || '';
+      document.getElementById('result-id').textContent     = res.guestId || '';
+
+      overlay.classList.add('show');
+    }
+
+    function nextGuest() {
+      busy = false;
+      document.getElementById('result-overlay').classList.remove('show');
+      document.getElementById('manual-input').value = '';
+      document.getElementById('scan-status').textContent = 'QR Code scanner ke saamne rakho';
+      if (scanner) scanner.resume();
+    }
+
+    document.getElementById('manual-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') verifyManual();
+    });
+
+    window.onload = startCamera;
+  </script>
+
+</body>
+</html>
