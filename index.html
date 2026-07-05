@@ -1,164 +1,968 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>Event Gate Scanner</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f1a; min-height: 100vh; color: white; }
-    .header { background: #1a1a2e; padding: 16px 20px; text-align: center; border-bottom: 1px solid #2a2a4a; }
-    .header h1 { font-size: 20px; font-weight: 600; }
-    .header p { font-size: 12px; color: #888; margin-top: 3px; }
-    .scanner-wrap { margin: 20px; border-radius: 16px; overflow: hidden; border: 2px solid #2a2a4a; }
-    #reader { width: 100%; }
-    .scan-status { background: #1a1a2e; text-align: center; padding: 10px; font-size: 13px; color: #aaa; }
-    .manual-section { margin: 0 20px 20px; background: #1a1a2e; border-radius: 12px; padding: 16px; border: 1px solid #2a2a4a; }
-    .manual-section label { font-size: 13px; color: #aaa; display: block; margin-bottom: 8px; }
-    .input-row { display: flex; gap: 10px; }
-    .manual-section input { flex: 1; padding: 12px 14px; background: #0f0f1a; border: 1.5px solid #2a2a4a; border-radius: 8px; color: white; font-size: 15px; outline: none; }
-    .manual-section input:focus { border-color: #534AB7; }
-    .verify-btn { padding: 12px 18px; background: #534AB7; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; }
-    .result-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; padding: 30px; }
-    .result-overlay.show { display: flex; }
-    .result-card { width: 100%; max-width: 360px; border-radius: 20px; padding: 36px 24px; text-align: center; }
-    .result-card.success { background: #0d2b1e; border: 2px solid #1D9E75; }
-    .result-card.error { background: #2b0d0d; border: 2px solid #E24B4A; }
-    .result-icon { font-size: 64px; margin-bottom: 16px; }
-    .result-status { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
-    .success .result-status { color: #1D9E75; }
-    .error .result-status { color: #E24B4A; }
-    .result-name { font-size: 28px; font-weight: 600; color: white; margin-bottom: 6px; }
-    .result-id { font-size: 13px; color: #888; margin-bottom: 20px; font-family: monospace; }
-    .next-btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
-    .success .next-btn { background: #1D9E75; color: white; }
-    .error .next-btn { background: #E24B4A; color: white; }
-    .loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
-    .loading-overlay.show { display: flex; }
-    .spinner { width: 48px; height: 48px; border: 4px solid #333; border-top-color: #534AB7; border-radius: 50%; animation: spin 0.8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .loading-overlay p { color: #aaa; font-size: 15px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Event Gatekeeper - QR Scan & Entry Control</title>
+    <!-- Include Supabase JS library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- jsQR: fallback QR decoder for browsers without BarcodeDetector -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            margin: 0;
+            padding: 8px;
+        }
+
+        .app-container {
+            max-width: 480px;
+            width: 100%;
+            background: rgba(255,255,255,0.08);
+            border-radius: 1.5rem;
+            padding: 6px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .card {
+            background: white;
+            border-radius: 1.2rem;
+            overflow: hidden;
+        }
+
+        .header {
+            background: #0f172a;
+            color: white;
+            padding: 0.45rem 1rem;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .content {
+            padding: 0.6rem;
+        }
+
+        .scanner-box {
+            background: #f1f5f9;
+            border-radius: 1rem;
+            padding: 0.5rem;
+            margin-bottom: 0.6rem;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Limit camera height so it doesn't take full screen */
+        #reader {
+            width: 100%;
+            border-radius: 0.7rem;
+            overflow: hidden;
+            max-height: 200px;
+        }
+
+        #reader video {
+            max-height: 200px;
+            object-fit: cover;
+        }
+
+        .scan-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        button {
+            background: #3b82f6;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 60px;
+            font-weight: 600;
+            color: white;
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex: 1;
+        }
+
+        button:hover { background: #2563eb; }
+        button.secondary { background: #475569; }
+        button.secondary:hover { background: #334155; }
+        button.danger { background: #ef4444; }
+
+        .result-panel {
+            background: #f8fafc;
+            border-radius: 0.8rem;
+            padding: 0.6rem 0.8rem;
+            margin-top: 0.5rem;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .entry-log {
+            background: #f1f5f9;
+            border-radius: 0.8rem;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+
+        .log-item {
+            background: white;
+            padding: 0.4rem 0.7rem;
+            margin-bottom: 5px;
+            border-radius: 0.7rem;
+            font-size: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #e2e8f0;
+        }
+
+        .log-time {
+            font-family: monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            background: #eef2ff;
+            padding: 2px 6px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        .badge-success {
+            background: #22c55e20;
+            color: #15803d;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 40px;
+            font-size: 0.68rem;
+        }
+
+        .badge-error {
+            background: #ef444420;
+            color: #b91c1c;
+        }
+
+        .scanned-info {
+            font-weight: 500;
+            font-size: 0.82rem;
+            word-break: break-all;
+        }
+
+        .status-msg {
+            font-size: 0.75rem;
+            margin-top: 5px;
+            text-align: center;
+        }
+
+        .flex-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Manual entry compact */
+        #manualEntryBox {
+            margin-bottom: 0.5rem !important;
+        }
+
+        #manualEntryBox > div:first-child {
+            font-size: 0.8rem !important;
+            margin-bottom: 5px !important;
+        }
+    </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Event Gate Scanner</h1>
-    <p>QR scan karo ya Guest ID type karo</p>
-  </div>
-  <div class="scanner-wrap">
-    <div id="reader"></div>
-    <div class="scan-status" id="scan-status">Camera start ho rahi hai...</div>
-  </div>
-  <div class="manual-section">
-    <label>Manual entry — Guest ID type karo:</label>
-    <div class="input-row">
-      <input type="text" id="manual-input" placeholder="EVT2026-..." autocomplete="off" />
-      <button class="verify-btn" onclick="verifyManual()">Verify</button>
+<div class="app-container">
+    <div class="card">
+        <!-- hidden counters kept for JS compatibility -->
+        <div id="countToday" style="display:none;">0</div>
+        <div id="countTotal" style="display:none;">0</div>
+        <div id="countPeople" style="display:none;">0</div>
+        <div id="clockDisplay" style="display:none;"></div>
+        <div class="header">
+            <h1>🎟️ Gatekeeper</h1>
+        </div>
+
+        <!-- POPUP OVERLAY -->
+        <div id="popup-overlay" style="display:none; position:fixed; inset:0; z-index:999; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:20px;">
+            <div id="popup-box" style="background:white; border-radius:2rem; padding:2rem 1.5rem; max-width:340px; width:100%; text-align:center; box-shadow:0 30px 60px rgba(0,0,0,0.4); animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);">
+                <div id="popup-icon" style="font-size:4rem; line-height:1; margin-bottom:0.5rem;">✅</div>
+                <div id="popup-title" style="font-size:1.4rem; font-weight:800; margin-bottom:0.4rem;">Entry Granted</div>
+                <div id="popup-name" style="font-size:1.1rem; font-weight:600; color:#334155; margin-bottom:0.3rem;"></div>
+                <div id="popup-people" style="font-size:2rem; font-weight:900; margin:0.5rem 0; padding:0.4rem 1.2rem; border-radius:1rem; display:inline-block;"></div>
+                <div id="popup-meta" style="font-size:0.82rem; color:#64748b; margin-top:0.4rem; line-height:1.6;"></div>
+                <button id="popup-close" onclick="closePopup()" style="margin-top:1.2rem; width:100%; padding:12px; border-radius:60px; font-size:1rem; font-weight:700;">OK</button>
+            </div>
+        </div>
+        <style>
+            @keyframes popIn {
+                from { transform: scale(0.7); opacity: 0; }
+                to   { transform: scale(1);   opacity: 1; }
+            }
+        </style>
+        <div class="content">
+            <!-- Scanner area -->
+            <div class="scanner-box">
+                <div id="reader" style="width:100%; position:relative; background:#000; border-radius:1rem; overflow:hidden; min-height:60px;">
+                    <video id="qrVideo" autoplay playsinline muted style="width:100%; display:none; border-radius:1rem;"></video>
+                    <canvas id="qrCanvas" style="display:none;"></canvas>
+                    <!-- Scanning overlay -->
+                    <div id="scanOverlay" style="display:none; position:absolute; inset:0; pointer-events:none;">
+                        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;">
+                            <div id="scanBox" style="width:65%; aspect-ratio:1; border:3px solid #3b82f6; border-radius:12px; box-shadow:0 0 0 9999px rgba(0,0,0,0.45); position:relative;">
+                                <!-- Corner accents -->
+                                <div style="position:absolute;top:-3px;left:-3px;width:22px;height:22px;border-top:4px solid #60a5fa;border-left:4px solid #60a5fa;border-radius:4px 0 0 0;"></div>
+                                <div style="position:absolute;top:-3px;right:-3px;width:22px;height:22px;border-top:4px solid #60a5fa;border-right:4px solid #60a5fa;border-radius:0 4px 0 0;"></div>
+                                <div style="position:absolute;bottom:-3px;left:-3px;width:22px;height:22px;border-bottom:4px solid #60a5fa;border-left:4px solid #60a5fa;border-radius:0 0 0 4px;"></div>
+                                <div style="position:absolute;bottom:-3px;right:-3px;width:22px;height:22px;border-bottom:4px solid #60a5fa;border-right:4px solid #60a5fa;border-radius:0 0 4px 0;"></div>
+                                <!-- Scan line animation -->
+                                <div id="scanLine" style="position:absolute;left:4px;right:4px;height:2px;background:linear-gradient(90deg,transparent,#3b82f6,transparent);animation:scanAnim 1.8s linear infinite;top:0;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <style>
+                    @keyframes scanAnim { 0%{top:5%} 50%{top:90%} 100%{top:5%} }
+                </style>
+                <div class="scan-controls">
+                    <button id="startScanBtn">📷 Start Scanner</button>
+                    <button id="stopScanBtn" class="secondary">⏹️ Stop</button>
+                </div>
+                <div class="status-msg" id="scanStatus">⚡ Ready. Press "Start Scanner"</div>
+            </div>
+
+            <!-- Manual Entry -->
+            <div class="scanner-box" id="manualEntryBox" style="margin-bottom:0.5rem;">
+                <div style="font-weight:600; margin-bottom:6px; font-size:0.8rem;">🔢 Manual Entry</div>
+
+                <!-- Tabs -->
+                <div style="display:flex; gap:4px; margin-bottom:8px;">
+                    <button type="button" id="tabGuestId" onclick="switchTab('guestid')"
+                        style="flex:1; padding:5px; font-size:0.75rem; border-radius:8px; background:#3b82f6; color:white;">
+                        🪪 Guest ID
+                    </button>
+                    <button type="button" id="tabPhone" onclick="switchTab('phone')"
+                        style="flex:1; padding:5px; font-size:0.75rem; border-radius:8px; background:#e2e8f0; color:#475569;">
+                        📱 Phone
+                    </button>
+                </div>
+
+                <!-- Guest ID input -->
+                <div id="guestIdTab">
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <div style="display:flex; align-items:center; flex:1; border:1.5px solid #cbd5e1; border-radius:60px; overflow:hidden; background:white;">
+                            <span style="padding:7px 6px 7px 12px; font-size:0.78rem; color:#334155; font-weight:700; border-right:1.5px solid #e2e8f0; white-space:nowrap; background:#f8fafc;">DC/SRCT/2026/</span>
+                            <input id="guestIdInput" type="text" placeholder="Last 4 digits"
+                                maxlength="4" inputmode="numeric"
+                                style="flex:1; padding:7px 8px; border:none; font-size:0.88rem; outline:none; background:white; width:70px; font-weight:600;" />
+                        </div>
+                        <button id="guestIdSubmitBtn" onclick="processGuestIdEntry()" style="flex:0 0 auto; white-space:nowrap; padding:7px 14px;">✅ Check In</button>
+                    </div>
+                </div>
+
+                <!-- Phone input -->
+                <div id="phoneTab" style="display:none;">
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <div style="display:flex; align-items:center; flex:1; border:1.5px solid #cbd5e1; border-radius:60px; overflow:hidden; background:white;">
+                            <span style="padding:7px 6px 7px 12px; font-size:0.82rem; color:#334155; font-weight:600; border-right:1.5px solid #e2e8f0;">+91</span>
+                            <input id="manualGuestInput" type="text" placeholder="10-digit number"
+                                maxlength="10" inputmode="numeric"
+                                style="flex:1; padding:7px 10px; border:none; font-size:0.82rem; outline:none; background:white;" />
+                        </div>
+                        <button id="manualSubmitBtn" style="flex:0 0 auto; white-space:nowrap; padding:7px 14px;">✅ Check In</button>
+                    </div>
+                </div>
+
+                <div class="status-msg" id="manualStatus" style="margin-top:4px;"></div>
+            </div>
+
+            <!-- Latest scan result -->
+            <div class="result-panel" id="resultPanel">
+                <div class="flex-between">
+                    <strong style="font-size:0.82rem;">📋 Last Scan Result</strong>
+                    <span id="badgeArea"></span>
+                </div>
+                <div id="scanResultText" class="scanned-info" style="margin-top:4px; font-size:0.8rem;">— No scan yet —</div>
+                <div id="extraDetails" style="font-size:0.72rem; color:#475569; margin-top:3px;"></div>
+            </div>
+
+            <!-- Today's Entry Logs -->
+            <div class="entry-log">
+                <div class="flex-between">
+                    <strong style="font-size:0.8rem;">📅 Today's Entries</strong>
+                    <span id="refreshLogBtn" style="cursor:pointer; background:#e2e8f0; padding:3px 8px; border-radius:40px; font-size:0.68rem;">🔄 Refresh</span>
+                </div>
+                <div id="logList" style="margin-top:6px;">
+                    <div style="text-align:center; color:#64748b; font-size:0.75rem;">Loading entries...</div>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
-  <div class="result-overlay" id="result-overlay">
-    <div class="result-card" id="result-card">
-      <div class="result-icon" id="result-icon"></div>
-      <div class="result-status" id="result-status"></div>
-      <div class="result-name" id="result-name"></div>
-      <div class="result-id" id="result-id"></div>
-      <button class="next-btn" onclick="nextGuest()">Next Guest Scan Karo</button>
-    </div>
-  </div>
-  <div class="loading-overlay" id="loading-overlay">
-    <div class="spinner"></div>
-    <p>Checking...</p>
-  </div>
+</div>
 
-  <script>
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby9bJ1Xqg_iKuVXzQLgTkM7dSpxm60KOX_5iHtZ7h9c9dS3MiMogbeZlHImQGvPw4g63w/exec';
+<script>
+    // ======================= CONFIGURATION =======================
+    // REPLACE WITH YOUR SUPABASE URL & ANON KEY
 
-    let scanner, busy = false;
+    const SUPABASE_URL = "https://xhjvpfiiccplueicyxig.supabase.co";     // <-- CHANGE
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoanZwZmlpY2NwbHVlaWN5eGlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyODg4MTcsImV4cCI6MjA5Nzg2NDgxN30.YMEfGx4WmGUERK4isNTkGVPM6IQi5DVFTmwOKHeark4";                  // <-- CHANGE
+    
+    // Table: guest_details
+    // Columns: phone (PK), id, email, event_name, qr_url, checked_in, registered_at, name, checkin_time, checkin_date, Guest_id
+    
+    // Initialize Supabase client
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // Global scanner state
+    let cameraStream = null;
+    let isScanning = false;
+    let isProcessingScan = false;
+    let scanRafId = null;
+    
+    // DOM elements
+    const startBtn = document.getElementById('startScanBtn');
+    const stopBtn = document.getElementById('stopScanBtn');
+    const scanStatusDiv = document.getElementById('scanStatus');
+    const scanResultText = document.getElementById('scanResultText');
+    const badgeArea = document.getElementById('badgeArea');
+    const extraDetailsDiv = document.getElementById('extraDetails');
+    const logListDiv = document.getElementById('logList');
+    const refreshLogBtn = document.getElementById('refreshLogBtn');
+    
+    // Helper: Get today's date in YYYY-MM-DD (UTC date based on local)
+    function getTodayDate() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
 
-    function startCamera() {
-      scanner = new Html5Qrcode("reader");
-      Html5Qrcode.getCameras().then(cameras => {
-        if (!cameras || cameras.length === 0) {
-          document.getElementById('scan-status').textContent = 'Camera nahi mila — manual use karo';
-          return;
+    // ── POPUP ──────────────────────────────────────────────────────
+    function showPopup(type, name, numPeople, meta) {
+        const overlay = document.getElementById('popup-overlay');
+        const box     = document.getElementById('popup-box');
+        const icon    = document.getElementById('popup-icon');
+        const title   = document.getElementById('popup-title');
+        const nameEl  = document.getElementById('popup-name');
+        const peopleEl= document.getElementById('popup-people');
+        const metaEl  = document.getElementById('popup-meta');
+        const closeBtn= document.getElementById('popup-close');
+
+        if (type === 'success') {
+            box.style.borderTop = '6px solid #22c55e';
+            icon.textContent = '✅';
+            title.textContent = 'Entry Granted';
+            title.style.color = '#15803d';
+            peopleEl.style.background = '#dcfce7';
+            peopleEl.style.color = '#166534';
+            peopleEl.innerHTML = `👥 ${numPeople} ${numPeople == 1 ? 'Person' : 'People'}`;
+            closeBtn.style.background = '#22c55e';
+        } else if (type === 'duplicate') {
+            box.style.borderTop = '6px solid #f59e0b';
+            icon.textContent = '⛔';
+            title.textContent = 'Already Entered!';
+            title.style.color = '#b45309';
+            peopleEl.style.background = '#fef3c7';
+            peopleEl.style.color = '#92400e';
+            peopleEl.innerHTML = `🚫 Not Allowed Today`;
+            closeBtn.style.background = '#f59e0b';
+        } else {
+            box.style.borderTop = '6px solid #ef4444';
+            icon.textContent = '❌';
+            title.textContent = 'Entry Denied';
+            title.style.color = '#b91c1c';
+            peopleEl.style.background = '#fee2e2';
+            peopleEl.style.color = '#991b1b';
+            peopleEl.innerHTML = `Invalid QR`;
+            closeBtn.style.background = '#ef4444';
         }
-        const cam = cameras.find(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('rear')) || cameras[cameras.length - 1];
-        scanner.start(cam.id, { fps: 10, qrbox: { width: 250, height: 250 } },
-          function(text) {
-            if (busy) return;
-            busy = true;
-            document.getElementById('scan-status').textContent = 'QR detected! Checking...';
-            verifyGuest(text);
-          }, function() {}
-        ).then(() => {
-          document.getElementById('scan-status').textContent = 'QR Code scanner ke saamne rakho';
-        }).catch(() => {
-          document.getElementById('scan-status').textContent = 'Camera error — manual use karo';
+
+        nameEl.textContent = name || '';
+        metaEl.innerHTML = meta || '';
+        overlay.style.display = 'flex';
+
+        // NO auto-close — user must click OK
+        clearTimeout(window._popupTimer);
+    }
+
+    function closePopup() {
+        document.getElementById('popup-overlay').style.display = 'none';
+        clearTimeout(window._popupTimer);
+    }
+    
+    // Load today's checked-in guests from guest_details
+    async function loadTodayEntries() {
+        try {
+            const todayStr = getTodayDate();
+            const { data, error } = await supabaseClient
+                .from('guest_details')
+                .select('phone, name, event_name, checkin_time, checkin_date, "Number of people"')
+                .eq('checked_in', true)
+                .eq('checkin_date', todayStr)
+                .order('checkin_time', { ascending: false });
+                
+            if (error) throw error;
+
+            // Today's registrations count
+            const todayCount = data ? data.length : 0;
+            document.getElementById('countToday').textContent = todayCount;
+
+            // Sum of Number of people for today
+            const todayPeople = data ? data.reduce((sum, g) => sum + (parseInt(g['Number of people']) || 1), 0) : 0;
+
+            // Total ever checked in (all days)
+            const { data: allData } = await supabaseClient
+                .from('guest_details')
+                .select('"Number of people"')
+                .eq('checked_in', true);
+            const totalCount = allData ? allData.length : 0;
+            const totalPeople = allData ? allData.reduce((sum, g) => sum + (parseInt(g['Number of people']) || 1), 0) : 0;
+
+            document.getElementById('countTotal').textContent = totalCount;
+            document.getElementById('countPeople').textContent = totalPeople;
+            
+            if (!data || data.length === 0) {
+                logListDiv.innerHTML = '<div style="text-align: center; color: #64748b;">✅ No entries recorded today yet.</div>';
+                return;
+            }
+            
+            let logsHtml = '';
+            for (let guest of data) {
+                const entryTime = guest.checkin_time ? guest.checkin_time.substring(0,8) : '--:--';
+                const customer = guest.name || 'Guest';
+                const shortPhone = guest.phone ? '****' + guest.phone.slice(-4) : '****';
+                const numPeople = guest['Number of people'] || 1;
+                logsHtml += `
+                    <div class="log-item">
+                        <div>
+                            <strong>${escapeHtml(customer)}</strong>
+                            <span style="background:#dcfce7;color:#166534;font-size:0.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:6px;">👥 ${numPeople} ${numPeople == 1 ? 'person' : 'people'}</span>
+                            <br>
+                            <span style="font-size:0.7rem; color:#334155;">${escapeHtml(guest.event_name || '')} · ${escapeHtml(shortPhone)}</span>
+                        </div>
+                        <div class="log-time">⏱️ ${entryTime}</div>
+                    </div>
+                `;
+            }
+            logListDiv.innerHTML = logsHtml;
+        } catch (err) {
+            console.error(err);
+            logListDiv.innerHTML = `<div style="color:#b91c1c;">⚠️ Failed to load entries: ${err.message}</div>`;
+        }
+    }
+    
+    // helper: escape html
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if(m === '&') return '&amp;';
+            if(m === '<') return '&lt;';
+            if(m === '>') return '&gt;';
+            return m;
+        }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
+            return c;
         });
-      }).catch(() => {
-        document.getElementById('scan-status').textContent = 'Camera access nahi mila';
-      });
+    }
+    
+    // Core: process scanned QR code (string content)
+    async function processScannedQR(qrString) {
+        if (!qrString || qrString.trim() === "") {
+            showResultMessage("⚠️ Empty QR code", false);
+            return;
+        }
+        
+        const trimmedQR = qrString.trim();
+        scanResultText.innerText = trimmedQR;
+        extraDetailsDiv.innerHTML = "⏳ Verifying registration & checking entry...";
+        badgeArea.innerHTML = "";
+        
+        try {
+            // 1) Try qr_url exact match first
+            let guest = null;
+            const { data: byUrl, error: urlError } = await supabaseClient
+                .from('guest_details')
+                .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people"')
+                .eq('qr_url', trimmedQR)
+                .maybeSingle();
+            if (urlError) throw new Error(`Lookup error: ${urlError.message}`);
+            guest = byUrl;
+
+            // 2) If not found by qr_url, try guest_id (numeric int8)
+            if (!guest) {
+                const gidNum = parseInt(trimmedQR);
+                if (!isNaN(gidNum)) {
+                    const { data: byGuestId, error: gidError } = await supabaseClient
+                        .from('guest_details')
+                        .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people"')
+                        .eq('guest_id', gidNum)
+                        .maybeSingle();
+                    if (gidError) throw new Error(`Lookup error: ${gidError.message}`);
+                    guest = byGuestId;
+                }
+            }
+
+            // 3) Try phone as last resort
+            if (!guest) {
+                const { data: byPhone, error: phError } = await supabaseClient
+                    .from('guest_details')
+                    .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people"')
+                    .eq('phone', trimmedQR)
+                    .maybeSingle();
+                if (phError) throw new Error(`Lookup error: ${phError.message}`);
+                guest = byPhone;
+            }
+
+            if (!guest) {
+                showResultMessage("❌ INVALID QR: No registration found!", false);
+                extraDetailsDiv.innerHTML = `Scanned: <span style="font-family:monospace;font-size:0.75rem;">${escapeHtml(trimmedQR)}</span><br>Not matched to any registered guest.`;
+                return;
+            }
+            
+            const customerName = guest.name || "Guest";
+            const eventName = guest.event_name || "Event";
+            const todayStr = getTodayDate();
+
+            // 2) Check if already checked in today
+            if (guest.checked_in && guest.checkin_date === todayStr) {
+                showPopup('duplicate', customerName, null, `Already checked in today.<br>They can enter again tomorrow.`);
+                return;
+            }
+
+            // 3) All good: Update checked_in status using phone (PK) — always reliable
+            const nowTime = new Date().toTimeString().split(' ')[0]; // HH:MM:SS
+            const { error: updateError } = await supabaseClient
+                .from('guest_details')
+                .update({
+                    checked_in: true,
+                    checkin_date: todayStr,
+                    checkin_time: nowTime
+                })
+                .eq('phone', guest.phone);
+                
+            if (updateError) throw new Error(`Update failed: ${updateError.message}`);
+            
+            // SUCCESS!
+            const numPeople = guest['Number of people'] || 1;
+            showPopup('success', customerName, numPeople,
+                `🎉 ${escapeHtml(eventName)}<br>⏰ ${new Date().toLocaleTimeString()} &nbsp;|&nbsp; 📱 ${escapeHtml(guest.phone || '—')}${guest.email ? '<br>📧 ' + escapeHtml(guest.email) : ''}`
+            );
+            showResultMessage(`✅ ENTRY GRANTED: ${escapeHtml(customerName)}`, true);
+            extraDetailsDiv.innerHTML = `👥 ${numPeople} ${numPeople == 1 ? 'Person' : 'People'} &nbsp;|&nbsp; ⏰ ${new Date().toLocaleTimeString()}`;
+            badgeArea.innerHTML = '<span class="badge-success" style="background:#dcfce7;">✔️ Entry Authorized</span>';
+
+            // 🔔 Call welcome webhook
+            callWelcomeWebhook(guest.name, guest.phone);
+            
+            // Refresh today's logs to show new entry
+            await loadTodayEntries();
+            
+            // Optional: vibration if supported
+            if (navigator.vibrate) navigator.vibrate(200);
+            
+        } catch (err) {
+            console.error("Processing error:", err);
+            showResultMessage(`⚠️ System error: ${err.message}`, false);
+            extraDetailsDiv.innerHTML = "Contact administrator if issue persists.";
+        }
+    }
+    
+    function showResultMessage(msg, isSuccess) {
+        const panel = document.getElementById('resultPanel');
+        scanResultText.innerHTML = msg;
+        if (isSuccess) {
+            panel.style.borderLeftColor = "#22c55e";
+        } else {
+            panel.style.borderLeftColor = "#ef4444";
+        }
+        // auto revert border style after 2 sec? not necessary but fine
+        setTimeout(() => {
+            if(document.getElementById('resultPanel')) 
+                document.getElementById('resultPanel').style.borderLeftColor = "#3b82f6";
+        }, 1800);
+    }
+    
+    // ---- Native Camera QR Scanner ----
+
+    const videoEl = document.getElementById('qrVideo');
+    const canvasEl = document.getElementById('qrCanvas');
+    const scanOverlay = document.getElementById('scanOverlay');
+    let barcodeDetector = null;
+
+    // Use BarcodeDetector if available (Chrome/Android), else jsQR
+    if (window.BarcodeDetector) {
+        barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
     }
 
-    function verifyManual() {
-      const val = document.getElementById('manual-input').value.trim();
-      if (!val) { alert('Guest ID daalo!'); return; }
-      if (busy) return;
-      busy = true;
-      verifyGuest(val);
+    function onQRDetected(text) {
+        if (!isScanning || isProcessingScan) return;
+        isProcessingScan = true;
+        scanStatusDiv.innerText = "⏳ QR detected — verifying...";
+        // Flash the scan box green briefly
+        const box = document.getElementById('scanBox');
+        if (box) { box.style.borderColor = '#22c55e'; setTimeout(() => { box.style.borderColor = '#3b82f6'; }, 600); }
+        if (navigator.vibrate) navigator.vibrate(100);
+
+        processScannedQR(text).finally(() => {
+            setTimeout(() => {
+                isProcessingScan = false;
+                if (isScanning) scanStatusDiv.innerText = "📷 Scanning... point QR at the box";
+            }, 2500);
+        });
     }
 
-    function verifyGuest(guestId) {
-      document.getElementById('loading-overlay').classList.add('show');
-      const url = APPS_SCRIPT_URL + '?guestId=' + encodeURIComponent(guestId);
+    async function scanFrame() {
+        if (!isScanning) return;
+        if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+            canvasEl.width = videoEl.videoWidth;
+            canvasEl.height = videoEl.videoHeight;
+            const ctx = canvasEl.getContext('2d');
+            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
 
-      const cbName = 'gs_cb_' + Date.now();
-      const script = document.createElement('script');
-
-      window[cbName] = function(data) {
-        document.getElementById('loading-overlay').classList.remove('show');
-        document.head.removeChild(script);
-        delete window[cbName];
-        showResult(data);
-      };
-
-      script.src = url + '&callback=' + cbName;
-      script.onerror = function() {
-        document.getElementById('loading-overlay').classList.remove('show');
-        busy = false;
-        alert('Connection failed! Apps Script check karo.');
-        document.head.removeChild(script);
-        delete window[cbName];
-      };
-      document.head.appendChild(script);
+            try {
+                if (barcodeDetector) {
+                    const codes = await barcodeDetector.detect(videoEl);
+                    if (codes.length > 0) onQRDetected(codes[0].rawValue);
+                } else if (window.jsQR) {
+                    const imgData = ctx.getImageData(0, 0, canvasEl.width, canvasEl.height);
+                    const code = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+                    if (code) onQRDetected(code.data);
+                }
+            } catch(e) { /* detection error, just continue */ }
+        }
+        scanRafId = requestAnimationFrame(scanFrame);
     }
 
-    function showResult(res) {
-      if (scanner) { try { scanner.pause(); } catch(e) {} }
-      const isSuccess = res.success === true;
-      const card = document.getElementById('result-card');
-      card.className = 'result-card ' + (isSuccess ? 'success' : 'error');
-      document.getElementById('result-icon').textContent = isSuccess ? '✅' : '❌';
-      document.getElementById('result-status').textContent = res.message || '';
-      document.getElementById('result-name').textContent = res.name || '';
-      document.getElementById('result-id').textContent = res.guestId || '';
-      document.getElementById('result-overlay').classList.add('show');
+    async function startScanner() {
+        if (isScanning) return;
+        scanStatusDiv.innerText = "⏳ Requesting camera...";
+        startBtn.disabled = true;
+
+        try {
+            // Stop any existing stream first
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+            }
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            });
+
+            cameraStream = stream;
+            videoEl.srcObject = stream;
+            videoEl.style.display = 'block';
+            scanOverlay.style.display = 'block';
+
+            await new Promise((resolve, reject) => {
+                videoEl.onloadedmetadata = resolve;
+                videoEl.onerror = reject;
+                setTimeout(resolve, 3000); // safety timeout
+            });
+            await videoEl.play();
+
+            isScanning = true;
+            isProcessingScan = false;
+            scanStatusDiv.innerText = "📷 Scanning... point QR at the box";
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            scanRafId = requestAnimationFrame(scanFrame);
+
+        } catch (err) {
+            console.error("Camera error:", err);
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+
+            // Give a clear, actionable message based on error type
+            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                scanStatusDiv.innerHTML = '❌ Camera permission denied.<br><small>Please allow camera in your browser settings and reload.</small>';
+            } else if (err.name === 'NotFoundError') {
+                scanStatusDiv.innerText = '❌ No camera found on this device.';
+            } else if (err.name === 'NotReadableError') {
+                scanStatusDiv.innerText = '❌ Camera in use by another app. Close it and retry.';
+            } else {
+                scanStatusDiv.innerText = '❌ Camera error: ' + (err.message || err.name);
+            }
+        }
     }
 
-    function nextGuest() {
-      busy = false;
-      document.getElementById('result-overlay').classList.remove('show');
-      document.getElementById('manual-input').value = '';
-      document.getElementById('scan-status').textContent = 'QR Code scanner ke saamne rakho';
-      if (scanner) { try { scanner.resume(); } catch(e) { startCamera(); } }
+    async function stopScanner() {
+        isScanning = false;
+        if (scanRafId) { cancelAnimationFrame(scanRafId); scanRafId = null; }
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(t => t.stop());
+            cameraStream = null;
+        }
+        videoEl.srcObject = null;
+        videoEl.style.display = 'none';
+        scanOverlay.style.display = 'none';
+        scanStatusDiv.innerText = "⏹️ Scanner stopped. Press Start to resume.";
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+    }
+    
+    // Initial checks and UI
+    async function initializeApp() {
+        // Validate supabase connection quickly
+        try {
+            const { error } = await supabaseClient.from('guest_details').select('phone').limit(1);
+            if (error && error.message.includes("relation") && error.message.includes("does not exist")) {
+                console.warn("Table guest_details may not exist.");
+                scanStatusDiv.innerText = "⚠️ DB table missing. See console.";
+                logListDiv.innerHTML = '<div style="color:#b91c1c;">⚠️ Missing table: guest_details. Please create it in Supabase.</div>';
+            } else {
+                await loadTodayEntries();
+            }
+        } catch(e) {
+            console.error(e);
+            logListDiv.innerHTML = `<div style="color:#b91c1c;">⚠️ DB connection error: check SUPABASE_URL/KEY</div>`;
+        }
+        
+        startBtn.onclick = startScanner;
+        document.getElementById('manualSubmitBtn').onclick = processManualEntry;
+        document.getElementById('manualGuestInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') processManualEntry();
+        });
+        document.getElementById('guestIdInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') processGuestIdEntry();
+        });
+        stopBtn.onclick = stopScanner;
+        refreshLogBtn.onclick = () => loadTodayEntries();
+        stopBtn.disabled = true;
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+        });
+    }
+    
+    // Provide manual data in case there is no table structure yet? Not needed but show instructions.
+    // For first-time setup, display info in console.
+    console.log("Gatekeeper App started. Using table: guest_details (phone PK, name, email, event_name, qr_url, checked_in, checkin_date, checkin_time, guest_id)");
+
+    // Live clock
+    function updateClock() {
+        const now = new Date();
+        const t = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const el = document.getElementById('clockDisplay');
+        if (el) el.textContent = t;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+    
+    // Manual entry by Guest_id or phone
+    async function processManualEntry() {
+        const rawInput = document.getElementById('manualGuestInput').value.trim();
+        const statusEl = document.getElementById('manualStatus');
+        if (!rawInput) {
+            statusEl.innerText = "⚠️ Please enter a Guest ID or phone number.";
+            return;
+        }
+        statusEl.innerText = "⏳ Looking up guest...";
+
+        // Build all phone variants to try
+        let phonesToTry = [rawInput];
+        if (/^\d{10}$/.test(rawInput)) {
+            // bare 10-digit → try with +91 and 91 prefix
+            phonesToTry = ['+91' + rawInput, '91' + rawInput, rawInput];
+        } else if (/^\+91\d{10}$/.test(rawInput)) {
+            phonesToTry = [rawInput, rawInput.replace('+91', ''), rawInput.replace('+91', '91')];
+        } else if (/^91\d{10}$/.test(rawInput)) {
+            phonesToTry = [rawInput, '+' + rawInput, rawInput.slice(2)];
+        }
+
+        try {
+            let guest = null, error = null;
+
+            // Try each phone variant
+            for (const ph of phonesToTry) {
+                const res = await supabaseClient
+                    .from('guest_details')
+                    .select('phone, name, email, event_name, checked_in, checkin_date, qr_url, guest_id, "Number of people"')
+                    .eq('phone', ph)
+                    .maybeSingle();
+                if (res.error) { error = res.error; break; }
+                if (res.data) { guest = res.data; break; }
+            }
+
+            // If still not found, try guest_id match (int8)
+            if (!guest && !error) {
+                const gidNum = parseInt(rawInput);
+                if (!isNaN(gidNum)) {
+                    const res = await supabaseClient
+                        .from('guest_details')
+                        .select('phone, name, email, event_name, checked_in, checkin_date, qr_url, guest_id, "Number of people"')
+                        .eq('guest_id', gidNum)
+                        .maybeSingle();
+                    guest = res.data; error = res.error;
+                }
+            }
+
+            if (error) throw new Error(error.message);
+            if (!guest) {
+                statusEl.innerText = "❌ No guest found. Try with +91 prefix or check the number.";
+                return;
+            }
+
+            const todayStr = getTodayDate();
+            if (guest.checked_in && guest.checkin_date === todayStr) {
+                showPopup('duplicate', guest.name || 'Guest', null, `Already checked in today.<br>Can enter again tomorrow.`);
+                statusEl.innerHTML = `⛔ Already entered today.`;
+                return;
+            }
+
+            const nowTime = new Date().toTimeString().split(' ')[0];
+            const { error: updateError } = await supabaseClient
+                .from('guest_details')
+                .update({ checked_in: true, checkin_date: todayStr, checkin_time: nowTime })
+                .eq('phone', guest.phone);
+
+            if (updateError) throw new Error(updateError.message);
+
+            statusEl.innerHTML = `✅ <strong>${escapeHtml(guest.name || 'Guest')}</strong> checked in for <em>${escapeHtml(guest.event_name || 'Event')}</em>`;
+            document.getElementById('manualGuestInput').value = '';
+            if (navigator.vibrate) navigator.vibrate(200);
+            await loadTodayEntries();
+
+            // Also update result panel
+            const numPeople = guest['Number of people'] || 1;
+            const numPeopleM = guest['Number of people'] || 1;
+            showPopup('success', guest.name || 'Guest', numPeopleM,
+                `🎉 ${escapeHtml(guest.event_name || 'Event')}<br>⏰ ${new Date().toLocaleTimeString()} &nbsp;|&nbsp; 📱 ${escapeHtml(guest.phone || '—')}${guest.email ? '<br>📧 ' + escapeHtml(guest.email) : ''}`
+            );
+            showResultMessage(`✅ ENTRY GRANTED: ${escapeHtml(guest.name || 'Guest')}`, true);
+            extraDetailsDiv.innerHTML = `👥 ${numPeopleM} ${numPeopleM == 1 ? 'Person' : 'People'} &nbsp;|&nbsp; ⏰ ${new Date().toLocaleTimeString()}`;
+            badgeArea.innerHTML = '<span class="badge-success" style="background:#dcfce7;">✔️ Entry Authorized</span>';
+
+            // 🔔 Call welcome webhook
+            callWelcomeWebhook(guest.name, guest.phone);
+
+        } catch (err) {
+            statusEl.innerText = `⚠️ Error: ${err.message}`;
+        }
     }
 
-    document.getElementById('manual-input').addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') verifyManual();
-    });
+    // ── WELCOME WEBHOOK ───────────────────────────────────────────
+    const WELCOME_WEBHOOK = 'https://n8n.divyachetana.in/webhook-test/welcome';
 
-    window.onload = startCamera;
-  </script>
+    function callWelcomeWebhook(name, phone) {
+        fetch(WELCOME_WEBHOOK, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name || 'Guest', phone: phone || '' })
+        }).then(r => {
+            console.log('Welcome webhook sent:', r.status);
+        }).catch(e => {
+            console.warn('Welcome webhook failed (non-critical):', e.message);
+        });
+    }
+
+    // ── TAB SWITCHING ─────────────────────────────────────────────
+    function switchTab(tab) {
+        const guestIdTab = document.getElementById('guestIdTab');
+        const phoneTab   = document.getElementById('phoneTab');
+        const tabGId     = document.getElementById('tabGuestId');
+        const tabPh      = document.getElementById('tabPhone');
+        document.getElementById('manualStatus').innerText = '';
+
+        if (tab === 'guestid') {
+            guestIdTab.style.display = 'block';
+            phoneTab.style.display   = 'none';
+            tabGId.style.background  = '#3b82f6';
+            tabGId.style.color       = 'white';
+            tabPh.style.background   = '#e2e8f0';
+            tabPh.style.color        = '#475569';
+        } else {
+            guestIdTab.style.display = 'none';
+            phoneTab.style.display   = 'block';
+            tabPh.style.background   = '#3b82f6';
+            tabPh.style.color        = 'white';
+            tabGId.style.background  = '#e2e8f0';
+            tabGId.style.color       = '#475569';
+        }
+    }
+
+    // ── GUEST ID ENTRY ────────────────────────────────────────────
+    async function processGuestIdEntry() {
+        const lastFour = document.getElementById('guestIdInput').value.trim();
+        const statusEl = document.getElementById('manualStatus');
+
+        if (!lastFour || !/^\d{4}$/.test(lastFour)) {
+            statusEl.innerText = '⚠️ Enter exactly 4 digits.';
+            return;
+        }
+
+        const fullGuestId = 'DC/SRCT/2026/' + lastFour;
+        statusEl.innerText = `⏳ Looking up ${fullGuestId}...`;
+
+        try {
+            const { data: guest, error } = await supabaseClient
+                .from('guest_details')
+                .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people"')
+                .eq('guest_id', fullGuestId)
+                .maybeSingle();
+
+            if (error) throw new Error(error.message);
+            if (!guest) {
+                statusEl.innerText = `❌ No guest found for ${fullGuestId}`;
+                return;
+            }
+
+            const todayStr = getTodayDate();
+            if (guest.checked_in && guest.checkin_date === todayStr) {
+                showPopup('duplicate', guest.name || 'Guest', null, `Already checked in today.<br>Can enter again tomorrow.`);
+                statusEl.innerText = '⛔ Already entered today.';
+                return;
+            }
+
+            const nowTime = new Date().toTimeString().split(' ')[0];
+            const { error: updateError } = await supabaseClient
+                .from('guest_details')
+                .update({ checked_in: true, checkin_date: todayStr, checkin_time: nowTime })
+                .eq('phone', guest.phone);
+
+            if (updateError) throw new Error(updateError.message);
+
+            const numPeople = guest['Number of people'] || 1;
+            showPopup('success', guest.name || 'Guest', numPeople,
+                `🎉 ${escapeHtml(guest.event_name || 'Event')}<br>⏰ ${new Date().toLocaleTimeString()} &nbsp;|&nbsp; 📱 ${escapeHtml(guest.phone || '—')}`
+            );
+            showResultMessage(`✅ ENTRY GRANTED: ${escapeHtml(guest.name || 'Guest')}`, true);
+            extraDetailsDiv.innerHTML = `👥 ${numPeople} ${numPeople == 1 ? 'Person' : 'People'} &nbsp;|&nbsp; ⏰ ${new Date().toLocaleTimeString()}`;
+            badgeArea.innerHTML = '<span class="badge-success" style="background:#dcfce7;">✔️ Entry Authorized</span>';
+
+            // 🔔 Welcome webhook
+            callWelcomeWebhook(guest.name, guest.phone);
+
+            document.getElementById('guestIdInput').value = '';
+            statusEl.innerHTML = `✅ <strong>${escapeHtml(guest.name || 'Guest')}</strong> checked in.`;
+            if (navigator.vibrate) navigator.vibrate(200);
+            await loadTodayEntries();
+
+        } catch (err) {
+            statusEl.innerText = `⚠️ Error: ${err.message}`;
+        }
+    }
+
+    initializeApp();
+</script>
 </body>
 </html>
