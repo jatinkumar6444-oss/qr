@@ -794,7 +794,7 @@
             for (const ph of phonesToTry) {
                 const res = await supabaseClient
                     .from('guest_details')
-                    .select('phone, name, email, event_name, checked_in, checkin_date, qr_url, guest_id, "Number of people"')
+                    .select('phone, name, email, event_name, checked_in, checkin_date, qr_url, guest_id, "Number of people", language')
                     .eq('phone', ph)
                     .maybeSingle();
                 if (res.error) { error = res.error; break; }
@@ -807,7 +807,7 @@
                 if (!isNaN(gidNum)) {
                     const res = await supabaseClient
                         .from('guest_details')
-                        .select('phone, name, email, event_name, checked_in, checkin_date, qr_url, guest_id, "Number of people"')
+                        .select('phone, name, email, event_name, checked_in, checkin_date, qr_url, guest_id, "Number of people", language')
                         .eq('guest_id', gidNum)
                         .maybeSingle();
                     guest = res.data; error = res.error;
@@ -865,10 +865,7 @@
         fetch(WELCOME_WEBHOOK, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ name: name || 'Guest', phone: phone || '', language: language || 'en' })
-
-
-            
+            body: JSON.stringify({ name: name || 'Guest', phone: phone || '', language: language || 'en' })
         }).then(r => {
             console.log('Welcome webhook sent:', r.status);
         }).catch(e => {
