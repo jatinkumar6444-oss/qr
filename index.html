@@ -494,7 +494,7 @@
             let guest = null;
             const { data: byUrl, error: urlError } = await supabaseClient
                 .from('guest_details')
-                .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people"')
+                .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people", language')
                 .eq('qr_url', trimmedQR)
                 .maybeSingle();
             if (urlError) throw new Error(`Lookup error: ${urlError.message}`);
@@ -502,23 +502,21 @@
 
             // 2) If not found by qr_url, try guest_id (numeric int8)
             if (!guest) {
-                const gidNum = parseInt(trimmedQR);
-                if (!isNaN(gidNum)) {
-                    const { data: byGuestId, error: gidError } = await supabaseClient
-                        .from('guest_details')
-                        .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people"')
-                        .eq('guest_id', gidNum)
-                        .maybeSingle();
-                    if (gidError) throw new Error(`Lookup error: ${gidError.message}`);
-                    guest = byGuestId;
-                }
+                // Try guest_id as text (DC/SRCT/2026/xxxx) or numeric
+                const { data: byGuestId, error: gidError } = await supabaseClient
+                    .from('guest_details')
+                    .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people", language')
+                    .eq('guest_id', trimmedQR)
+                    .maybeSingle();
+                if (gidError) throw new Error(`Lookup error: ${gidError.message}`);
+                guest = byGuestId;
             }
 
             // 3) Try phone as last resort
             if (!guest) {
                 const { data: byPhone, error: phError } = await supabaseClient
                     .from('guest_details')
-                    .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people"')
+                    .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people", language')
                     .eq('phone', trimmedQR)
                     .maybeSingle();
                 if (phError) throw new Error(`Lookup error: ${phError.message}`);
@@ -564,7 +562,7 @@
             badgeArea.innerHTML = '<span class="badge-success" style="background:#dcfce7;">✔️ Entry Authorized</span>';
 
             // 🔔 Call welcome webhook
-            callWelcomeWebhook(guest.name, guest.phone);
+            callWelcomeWebhook(guest.name, guest.phone, guest.language);
             
             // Refresh today's logs to show new entry
             await loadTodayEntries();
@@ -853,7 +851,7 @@
             badgeArea.innerHTML = '<span class="badge-success" style="background:#dcfce7;">✔️ Entry Authorized</span>';
 
             // 🔔 Call welcome webhook
-            callWelcomeWebhook(guest.name, guest.phone);
+            callWelcomeWebhook(guest.name, guest.phone, guest.language);
 
         } catch (err) {
             statusEl.innerText = `⚠️ Error: ${err.message}`;
@@ -863,11 +861,14 @@
     // ── WELCOME WEBHOOK ───────────────────────────────────────────
     const WELCOME_WEBHOOK = 'https://n8n.divyachetana.in/webhook-test/welcome';
 
-    function callWelcomeWebhook(name, phone) {
+    function callWelcomeWebhook(name, phone, language) {
         fetch(WELCOME_WEBHOOK, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name || 'Guest', phone: phone || '' })
+           body: JSON.stringify({ name: name || 'Guest', phone: phone || '', language: language || 'en' })
+
+
+            
         }).then(r => {
             console.log('Welcome webhook sent:', r.status);
         }).catch(e => {
@@ -916,7 +917,7 @@
         try {
             const { data: guest, error } = await supabaseClient
                 .from('guest_details')
-                .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people"')
+                .select('phone, name, email, event_name, checked_in, checkin_date, guest_id, "Number of people", language')
                 .eq('guest_id', fullGuestId)
                 .maybeSingle();
 
@@ -950,7 +951,7 @@
             badgeArea.innerHTML = '<span class="badge-success" style="background:#dcfce7;">✔️ Entry Authorized</span>';
 
             // 🔔 Welcome webhook
-            callWelcomeWebhook(guest.name, guest.phone);
+            callWelcomeWebhook(guest.name, guest.phone, guest.language);
 
             document.getElementById('guestIdInput').value = '';
             statusEl.innerHTML = `✅ <strong>${escapeHtml(guest.name || 'Guest')}</strong> checked in.`;
